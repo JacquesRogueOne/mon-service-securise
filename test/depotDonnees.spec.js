@@ -4,6 +4,7 @@ const bcrypt = require('bcrypt');
 const DepotDonnees = require('../src/depotDonnees');
 const {
   ErreurEmailManquant,
+  ErreurNomServiceDejaExistant,
   ErreurNomServiceManquant,
   ErreurUtilisateurExistant,
 } = require('../src/erreurs');
@@ -222,6 +223,24 @@ describe('Le dépôt de données persistées en mémoire', () => {
         })
         .catch(done);
     });
+
+    it("ne détecte pas de doublon sur le nom de service pour l'homologation en cours de mise à jour", (done) => {
+      const adaptateurPersistance = AdaptateurPersistanceMemoire.nouvelAdaptateur({
+        homologations: [
+          { id: '123', informationsGenerales: { nomService: 'Super Service', dejaMisEnLigne: 'non' } },
+        ],
+      });
+      const depot = DepotDonnees.creeDepot({ adaptateurPersistance });
+
+      const infos = new InformationsGenerales({ nomService: 'Super Service', dejaMisEnLigne: 'oui' });
+      depot.ajouteInformationsGeneralesAHomologation('123', infos)
+        .then(() => depot.homologation('123'))
+        .then(({ informationsGenerales }) => {
+          expect(informationsGenerales.dejaMisEnLigne).to.equal('oui');
+          done();
+        })
+        .catch(done);
+    });
   });
 
   it('sait associer des caractéristiques complémentaires à une homologation', (done) => {
@@ -387,11 +406,12 @@ describe('Le dépôt de données persistées en mémoire', () => {
   });
 
   describe("quand il reçoit une demande d'enregistrement d'une nouvelle homologation", () => {
-    const adaptateurUUID = { genereUUID: () => {} };
+    const adaptateurUUID = { genereUUID: () => 'unUUID' };
     let depot;
 
     beforeEach(() => {
       const adaptateurPersistance = AdaptateurPersistanceMemoire.nouvelAdaptateur({
+        utilisateurs: [{ id: '123', email: 'jean.dupont@mail.fr' }],
         homologations: [],
       });
       depot = DepotDonnees.creeDepot({ adaptateurPersistance, adaptateurUUID });
@@ -430,6 +450,18 @@ describe('Le dépôt de données persistées en mémoire', () => {
         .then(() => done("La création de l'homologation aurait dû lever une exception"))
         .catch((e) => expect(e).to.be.an(ErreurNomServiceManquant))
         .then(() => done())
+        .catch(done);
+    });
+
+    it('lève une exception si le nom du service existe déjà pour une autre homologation', (done) => {
+      depot.nouvelleHomologation('123', { nomService: 'Un nom' })
+        .then(() => depot.nouvelleHomologation('123', { nomService: 'Un nom' }))
+        .then(() => done("La création de l'homologation aurait dû lever une exception"))
+        .catch((e) => {
+          expect(e).to.be.an(ErreurNomServiceDejaExistant);
+          expect(e.message).to.equal('Le nom du service "Un nom" existe déjà pour une autre homologation');
+          done();
+        })
         .catch(done);
     });
   });
@@ -514,6 +546,61 @@ describe('Le dépôt de données persistées en mémoire', () => {
       .then((utilisateurExiste) => expect(utilisateurExiste).to.be(false))
       .then(() => done())
       .catch(done);
+  });
+
+  describe('sur vérification existence homologation avec un nom de service donné', () => {
+    it('détecte existence homologation', (done) => {
+      const adaptateurPersistance = AdaptateurPersistanceMemoire.nouvelAdaptateur({
+        utilisateurs: [{ id: '123', email: 'jean.dupont@mail.fr' }],
+        homologations: [{
+          id: '789', idUtilisateur: '123', informationsGenerales: { nomService: 'Un service existant' },
+        }],
+      });
+      const depot = DepotDonnees.creeDepot({ adaptateurPersistance });
+
+      depot.homologationExiste('123', 'Un nom de service')
+        .then((homologationExiste) => expect(homologationExiste).to.be(false))
+        .then(() => depot.homologationExiste('123', 'Un service existant'))
+        .then((homologationExiste) => expect(homologationExiste).to.be(true))
+        .then(() => done())
+        .catch(done);
+    });
+
+    it("ne considère que les homologations de l'utilisateur donné", (done) => {
+      const adaptateurPersistance = AdaptateurPersistanceMemoire.nouvelAdaptateur({
+        utilisateurs: [
+          { id: '123', email: 'jean.dupont@mail.fr' },
+          { id: '456', email: 'sylvie.martin@mail.fr' },
+        ],
+        homologations: [{
+          id: '789', idUtilisateur: '123', informationsGenerales: { nomService: 'Un service existant' },
+        }],
+      });
+      const depot = DepotDonnees.creeDepot({ adaptateurPersistance });
+
+      depot.homologationExiste('456', 'Un service existant')
+        .then((homologationExiste) => expect(homologationExiste).to.be(false))
+        .then(() => done())
+        .catch(done);
+    });
+
+    it("ne considère pas l'homologation en cours de mise à jour", (done) => {
+      const adaptateurPersistance = AdaptateurPersistanceMemoire.nouvelAdaptateur({
+        utilisateurs: [{ id: '123', email: 'jean.dupont@mail.fr' }],
+        homologations: [
+          { id: '888', idUtilisateur: '123', informationsGenerales: { nomService: 'Un service existant' } },
+          { id: '999', idUtilisateur: '123', informationsGenerales: { nomService: 'Un nom de service' } },
+        ],
+      });
+      const depot = DepotDonnees.creeDepot({ adaptateurPersistance });
+
+      depot.homologationExiste('123', 'Un service existant', '888')
+        .then((homologationExiste) => expect(homologationExiste).to.be(false))
+        .then(() => depot.homologationExiste('123', 'Un service existant', '999'))
+        .then((homologationExiste) => expect(homologationExiste).to.be(true))
+        .then(() => done())
+        .catch(done);
+    });
   });
 
   it("retourne l'utilisateur associé à un identifiant donné", (done) => {

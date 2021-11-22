@@ -1,7 +1,12 @@
 const axios = require('axios');
 const expect = require('expect.js');
 
-const { ErreurEmailManquant, ErreurUtilisateurExistant } = require('../src/erreurs');
+const {
+  ErreurEmailManquant,
+  ErreurNomServiceDejaExistant,
+  ErreurNomServiceManquant,
+  ErreurUtilisateurExistant,
+} = require('../src/erreurs');
 const MSS = require('../src/mss');
 const Referentiel = require('../src/referentiel');
 const DepotDonnees = require('../src/depotDonnees');
@@ -38,16 +43,21 @@ const verifieRequeteChangeEtat = (donneesEtat, requete, done) => {
 };
 
 describe('Le serveur MSS', () => {
+  let authentificationBasiqueMenee;
+  let expirationCookieRepoussee;
   let idUtilisateurCourant;
+  let parametresAseptises;
+  let rechercheHomologationEffectuee;
   let suppressionCookieEffectuee;
   let verificationJWTMenee;
   let verificationCGUMenee;
-  let authentificationBasiqueMenee;
-  let rechercheHomologationEffectuee;
-  let parametresAseptises;
 
   const verifieRequeteExigeSuppressionCookie = (...params) => {
     verifieRequeteChangeEtat({ lectureEtat: () => suppressionCookieEffectuee }, ...params);
+  };
+
+  const verifieRequeteRepousseExpirationCookie = (...params) => {
+    verifieRequeteChangeEtat({ lectureEtat: () => expirationCookieRepoussee }, ...params);
   };
 
   const verifieRequeteExigeJWT = (...params) => {
@@ -74,16 +84,48 @@ describe('Le serveur MSS', () => {
     }, ...params);
   };
 
-  const verifieJetonDepose = (reponse, done) => {
-    expect(reponse.headers['set-cookie'][0]).to.match(
-      /^token=.+; path=\/; expires=.+; samesite=strict; httponly$/
-    );
-    done();
+  const verifieValeurHeader = (valeurHeader, regExpValeurAttendue, suite) => {
+    expect(valeurHeader).to.match(regExpValeurAttendue);
+    suite();
   };
 
+  const verifieJetonDepose = (reponse, suite) => verifieValeurHeader(
+    reponse.headers['set-cookie'][0],
+    /^token=.+; path=\/; expires=.+; samesite=strict; httponly$/,
+    suite
+  );
+
+  const verifiePositionnementHeader = (requete, nomHeader, regExpAttendue, suite) => axios(requete)
+    .then((reponse) => {
+      expect(reponse.headers).to.have.property(nomHeader);
+      verifieValeurHeader(reponse.headers[nomHeader], regExpAttendue, suite);
+    })
+    .catch(suite);
+
   const middleware = {
+    aseptise: (...nomsParametres) => (requete, reponse, suite) => {
+      parametresAseptises = nomsParametres;
+      suite();
+    },
+
+    authentificationBasique: (requete, reponse, suite) => {
+      authentificationBasiqueMenee = true;
+      suite();
+    },
+
+    repousseExpirationCookie: (requete, reponse, suite) => {
+      expirationCookieRepoussee = true;
+      suite();
+    },
+
     suppressionCookie: (requete, reponse, suite) => {
       suppressionCookieEffectuee = true;
+      suite();
+    },
+
+    trouveHomologation: (requete, reponse, suite) => {
+      requete.homologation = new Homologation({ id: '456' });
+      rechercheHomologationEffectuee = true;
       suite();
     },
 
@@ -98,22 +140,6 @@ describe('Le serveur MSS', () => {
       verificationCGUMenee = true;
       suite();
     },
-
-    authentificationBasique: (requete, reponse, suite) => {
-      authentificationBasiqueMenee = true;
-      suite();
-    },
-
-    trouveHomologation: (requete, reponse, suite) => {
-      requete.homologation = new Homologation({ id: '456' });
-      rechercheHomologationEffectuee = true;
-      suite();
-    },
-
-    aseptise: (...nomsParametres) => (requete, reponse, suite) => {
-      parametresAseptises = nomsParametres;
-      suite();
-    },
   };
 
   let adaptateurMail;
@@ -122,13 +148,14 @@ describe('Le serveur MSS', () => {
   let serveur;
 
   beforeEach((done) => {
+    authentificationBasiqueMenee = false;
+    expirationCookieRepoussee = false;
     idUtilisateurCourant = undefined;
+    parametresAseptises = [];
+    rechercheHomologationEffectuee = false;
     suppressionCookieEffectuee = false;
     verificationJWTMenee = false;
     verificationCGUMenee = false;
-    authentificationBasiqueMenee = false;
-    rechercheHomologationEffectuee = false;
-    parametresAseptises = [];
 
     referentiel = Referentiel.creeReferentielVide();
     adaptateurMail = {
@@ -152,6 +179,69 @@ describe('Le serveur MSS', () => {
         done();
       })
       .catch(done);
+  });
+
+  describe('quand une page est servie', () => {
+    it('autorise le chargement de toutes les ressources du domaine', (done) => {
+      verifiePositionnementHeader(
+        'http://localhost:1234/',
+        'content-security-policy', /default-src 'self'/,
+        done,
+      );
+    });
+
+    it('autorise le chargement de tous les scripts extérieurs utilisés dans la vue', (done) => {
+      verifiePositionnementHeader(
+        'http://localhost:1234/',
+        'content-security-policy', /script-src[^;]* unpkg.com code.jquery.com/,
+        done,
+      );
+    });
+
+    it('autorise le chargemnet de tous les scripts du domaine', (done) => {
+      verifiePositionnementHeader(
+        'http://localhost:1234/',
+        'content-security-policy', /script-src[^;]* 'self'/,
+        done,
+      );
+    });
+
+    it('interdit le chargement de cette page dans une iFrame', (done) => {
+      verifiePositionnementHeader(
+        'http://localhost:1234/',
+        'x-frame-options', /^deny$/,
+        done
+      );
+    });
+
+    it('interdit les inférences de types de média hors des infos données par le serveur', (done) => {
+      verifiePositionnementHeader(
+        'http://localhost:1234/',
+        'x-content-type-options', /^nosniff$/,
+        done
+      );
+    });
+
+    it("n'affiche pas l'URL de provenance quand l'utilisateur change de page", (done) => {
+      verifiePositionnementHeader(
+        'http://localhost:1234/',
+        'referrer-policy', /^no-referrer$/,
+        done
+      );
+    });
+
+    it("n'affiche pas d'information sur la nature du serveur", (done) => {
+      axios.get('http://localhost:1234')
+        .then((reponse) => {
+          expect(reponse.headers).to.not.have.property('x-powered-by');
+          done();
+        })
+        .catch(done);
+    });
+
+    it("repousse l'expiration du cookie", (done) => {
+      verifieRequeteRepousseExpirationCookie('http://localhost:1234/', done);
+    });
   });
 
   describe('quand requête GET sur `/connexion`', () => {
@@ -316,16 +406,11 @@ describe('Le serveur MSS', () => {
     });
 
     it('retourne une erreur HTTP 422 si les données sont invalides', (done) => {
-      axios.get('http://localhost:1234/api/seuilCriticite', { params: {
-        delaiAvantImpactCritique: 'delaiInvalide',
-      } })
-        .then(() => done('Réponse HTTP OK inattendue'))
-        .catch((erreur) => {
-          expect(erreur.response.status).to.equal(422);
-          expect(erreur.response.data).to.equal('Données invalides');
-          done();
-        })
-        .catch(done);
+      verifieRequeteGenereErreurHTTP(422, 'Données invalides', {
+        method: 'get',
+        url: 'http://localhost:1234/api/seuilCriticite',
+        params: { delaiAvantImpactCritique: 'delaiInvalide' },
+      }, done);
     });
   });
 
@@ -345,14 +430,23 @@ describe('Le serveur MSS', () => {
     });
 
     it('retourne une erreur HTTP 422 si données insuffisantes pour création homologation', (done) => {
-      axios.post('http://localhost:1234/api/homologation', {})
-        .then(() => done('Réponse HTTP OK inattendue'))
-        .catch((erreur) => {
-          expect(erreur.response.status).to.equal(422);
-          expect(erreur.response.data).to.equal("Données insuffisantes pour créer l'homologation");
-          done();
-        })
-        .catch(done);
+      depotDonnees.nouvelleHomologation = () => Promise.reject(new ErreurNomServiceManquant('oups'));
+
+      verifieRequeteGenereErreurHTTP(422, 'oups', {
+        method: 'post',
+        url: 'http://localhost:1234/api/homologation',
+        data: {},
+      }, done);
+    });
+
+    it('retourne une erreur HTTP 422 si le nom du service existe déjà', (done) => {
+      depotDonnees.nouvelleHomologation = () => Promise.reject(new ErreurNomServiceDejaExistant('oups'));
+
+      verifieRequeteGenereErreurHTTP(422, 'oups', {
+        method: 'post',
+        url: 'http://localhost:1234/api/homologation',
+        data: { nomService: 'Un nom déjà existant' },
+      }, done);
     });
 
     it("demande au dépôt de données d'enregistrer les nouvelles homologations", (done) => {
@@ -420,6 +514,18 @@ describe('Le serveur MSS', () => {
           done();
         })
         .catch(done);
+    });
+
+    it('retourne une erreur HTTP 422 si la validation des données échoue', (done) => {
+      depotDonnees.ajouteInformationsGeneralesAHomologation = () => Promise.reject(
+        new ErreurNomServiceDejaExistant('oups')
+      );
+
+      verifieRequeteGenereErreurHTTP(422, 'oups', {
+        method: 'put',
+        url: 'http://localhost:1234/api/homologation/456',
+        data: { nomService: 'service déjà existant' },
+      }, done);
     });
   });
 
@@ -490,16 +596,11 @@ describe('Le serveur MSS', () => {
     });
 
     it('retourne une erreur HTTP 422 si les données sont invalides', (done) => {
-      axios.post('http://localhost:1234/api/homologation/456/caracteristiquesComplementaires', {
-        localisationDonnees: 'localisationInvalide',
-      })
-        .then(() => done('Réponse HTTP OK inattendue'))
-        .catch((erreur) => {
-          expect(erreur.response.status).to.equal(422);
-          expect(erreur.response.data).to.equal('Données invalides');
-          done();
-        })
-        .catch(done);
+      verifieRequeteGenereErreurHTTP(422, 'Données invalides', {
+        method: 'post',
+        url: 'http://localhost:1234/api/homologation/456/caracteristiquesComplementaires',
+        data: { localisationDonnees: 'localisationInvalide' },
+      }, done);
     });
   });
 
@@ -592,16 +693,11 @@ describe('Le serveur MSS', () => {
     });
 
     it('retourne une erreur HTTP 422 si les données sont invalides', (done) => {
-      axios.post('http://localhost:1234/api/homologation/456/mesures', {
-        identifiantInvalide: 'statutInvalide',
-      })
-        .then(() => done('Réponse HTTP OK inattendue'))
-        .catch((erreur) => {
-          expect(erreur.response.status).to.equal(422);
-          expect(erreur.response.data).to.equal('Données invalides');
-          done();
-        })
-        .catch(done);
+      verifieRequeteGenereErreurHTTP(422, 'Données invalides', {
+        method: 'post',
+        url: 'http://localhost:1234/api/homologation/456/mesures',
+        data: { identifiantInvalide: 'statutInvalide' },
+      }, done);
     });
   });
 
@@ -740,16 +836,11 @@ describe('Le serveur MSS', () => {
     });
 
     it('retourne une erreur HTTP 422 si les données sont invalides', (done) => {
-      axios.post('http://localhost:1234/api/homologation/456/risques', {
-        'commentaire-unRisqueInvalide': 'Un commentaire',
-      })
-        .then(() => done('Réponse HTTP OK inattendue'))
-        .catch((erreur) => {
-          expect(erreur.response.status).to.equal(422);
-          expect(erreur.response.data).to.equal('Données invalides');
-          done();
-        })
-        .catch(done);
+      verifieRequeteGenereErreurHTTP(422, 'Données invalides', {
+        method: 'post',
+        url: 'http://localhost:1234/api/homologation/456/risques',
+        data: { 'commentaire-unRisqueInvalide': 'Un commentaire' },
+      }, done);
     });
   });
 
@@ -790,16 +881,11 @@ describe('Le serveur MSS', () => {
     });
 
     it('retourne une erreur HTTP 422 si les données sont invalides', (done) => {
-      axios.post('http://localhost:1234/api/homologation/456/avisExpertCyber', {
-        avis: 'avisInvalide',
-      })
-        .then(() => done('Réponse HTTP OK inattendue'))
-        .catch((erreur) => {
-          expect(erreur.response.status).to.equal(422);
-          expect(erreur.response.data).to.equal('Données invalides');
-          done();
-        })
-        .catch(done);
+      verifieRequeteGenereErreurHTTP(422, 'Données invalides', {
+        method: 'post',
+        url: 'http://localhost:1234/api/homologation/456/avisExpertCyber',
+        data: { avis: 'avisInvalide' },
+      }, done);
     });
   });
 
@@ -890,19 +976,19 @@ describe('Le serveur MSS', () => {
     });
 
     it("génère une erreur HTTP 422 si l'utilisateur existe déjà", (done) => {
-      depotDonnees.nouvelUtilisateur = () => Promise.reject(new ErreurUtilisateurExistant());
+      depotDonnees.nouvelUtilisateur = () => Promise.reject(new ErreurUtilisateurExistant('oups'));
 
       verifieRequeteGenereErreurHTTP(
-        422, 'Utilisateur déjà existant pour cette adresse email',
+        422, 'oups',
         { method: 'post', url: 'http://localhost:1234/api/utilisateur' }, done
       );
     });
 
     it("génère une erreur HTTP 422 si l'email n'est pas renseigné", (done) => {
-      depotDonnees.nouvelUtilisateur = () => Promise.reject(new ErreurEmailManquant());
+      depotDonnees.nouvelUtilisateur = () => Promise.reject(new ErreurEmailManquant('oups'));
 
       verifieRequeteGenereErreurHTTP(
-        422, 'Le champ email doit être renseigné',
+        422, 'oups',
         { method: 'post', url: 'http://localhost:1234/api/utilisateur' }, done
       );
     });

@@ -1,7 +1,7 @@
 const cookieSession = require('cookie-session');
 const express = require('express');
 
-const { ErreurEmailManquant, ErreurUtilisateurExistant } = require('./erreurs');
+const { ErreurModele } = require('./erreurs');
 const AvisExpertCyber = require('./modeles/avisExpertCyber');
 const CaracteristiquesComplementaires = require('./modeles/caracteristiquesComplementaires');
 const Homologation = require('./modeles/homologation');
@@ -37,6 +37,20 @@ const creeServeur = (depotDonnees, middleware, referentiel, adaptateurMail,
     secret: process.env.SECRET_COOKIE,
     secure: avecCookieSecurise,
   }));
+
+  app.use((requete, reponse, suite) => {
+    reponse.set({
+      'content-security-policy': "default-src 'self'; script-src 'self' unpkg.com code.jquery.com",
+      'x-frame-options': 'deny',
+      'x-content-type-options': 'nosniff',
+      'referrer-policy': 'no-referrer',
+    });
+    suite();
+  });
+
+  app.use(middleware.repousseExpirationCookie);
+
+  app.disable('x-powered-by');
 
   app.set('trust proxy', 1);
   app.set('view engine', 'pug');
@@ -200,43 +214,47 @@ const creeServeur = (depotDonnees, middleware, referentiel, adaptateurMail,
   app.post('/api/homologation',
     middleware.verificationAcceptationCGU,
     middleware.aseptise('nomService'),
-    (requete, reponse) => {
-      if (typeof requete.body.nomService === 'string' && requete.body.nomService) {
-        const {
-          nomService,
-          natureService,
-          provenanceService,
-          dejaMisEnLigne,
-          fonctionnalites,
-          donneesCaracterePersonnel,
-          delaiAvantImpactCritique,
-          presenceResponsable,
-        } = requete.body;
+    (requete, reponse, suite) => {
+      const {
+        nomService,
+        natureService,
+        provenanceService,
+        dejaMisEnLigne,
+        fonctionnalites,
+        donneesCaracterePersonnel,
+        delaiAvantImpactCritique,
+        presenceResponsable,
+      } = requete.body;
 
-        depotDonnees.nouvelleHomologation(requete.idUtilisateurCourant, {
-          nomService,
-          natureService,
-          provenanceService,
-          dejaMisEnLigne,
-          fonctionnalites,
-          donneesCaracterePersonnel,
-          delaiAvantImpactCritique,
-          presenceResponsable,
-        })
-          .then((idHomologation) => reponse.json({ idHomologation }));
-      } else reponse.status(422).send("Données insuffisantes pour créer l'homologation");
+      depotDonnees.nouvelleHomologation(requete.idUtilisateurCourant, {
+        nomService,
+        natureService,
+        provenanceService,
+        dejaMisEnLigne,
+        fonctionnalites,
+        donneesCaracterePersonnel,
+        delaiAvantImpactCritique,
+        presenceResponsable,
+      })
+        .then((idHomologation) => reponse.json({ idHomologation }))
+        .catch((e) => {
+          if (e instanceof ErreurModele) reponse.status(422).send(e.message);
+          else suite(e);
+        });
     });
 
   app.put('/api/homologation/:id',
     middleware.trouveHomologation,
     middleware.aseptise('nomService'),
-    (requete, reponse) => {
+    (requete, reponse, suite) => {
       const infosGenerales = new InformationsGenerales(requete.body, referentiel);
       depotDonnees.ajouteInformationsGeneralesAHomologation(requete.params.id, infosGenerales)
         .then(() => reponse.send({ idHomologation: requete.homologation.id }))
-        .catch(() => reponse.status(422).send(
-          "Données insuffisantes pour mettre à jour l'homologation"
-        ));
+        .catch((e) => {
+          if (e instanceof ErreurModele) {
+            reponse.status(422).send(e.message);
+          } else suite(e);
+        });
     });
 
   app.post('/api/homologation/:id/caracteristiquesComplementaires',
@@ -396,11 +414,8 @@ const creeServeur = (depotDonnees, middleware, referentiel, adaptateurMail,
           })
       ))
       .catch((e) => {
-        if (e instanceof ErreurUtilisateurExistant) {
-          reponse.status(422).send('Utilisateur déjà existant pour cette adresse email');
-        } else if (e instanceof ErreurEmailManquant) {
-          reponse.status(422).send('Le champ email doit être renseigné');
-        } else suite(e);
+        if (e instanceof ErreurModele) reponse.status(422).send(e.message);
+        else suite(e);
       });
   });
 
