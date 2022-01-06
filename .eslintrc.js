@@ -11,6 +11,8 @@ module.exports = {
   ],
   globals: {
     axios: 'readonly',
+    html2canvas: 'readonly',
+    jspdf: 'readonly',
   },
   parserOptions: {
     ecmaVersion: 12,
@@ -33,7 +35,7 @@ module.exports = {
     }],
   },
   overrides: [{
-    files: ['public/*/*.js'],
+    files: ['public/**/*.js'],
     rules: { 'import/extensions': ['error', 'always'] },
   }, {
     files: ['test/*/*.js'],

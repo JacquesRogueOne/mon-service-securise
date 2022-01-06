@@ -1,11 +1,34 @@
 body {
-  margin: 2em;
-  padding: 0;
+  margin: 10em auto 0;
+  width: 1000px;
+
   background: #fafbfc;
 
   font-family: "Marianne";
   font-size: 10px;
   color: #0d4269;
+}
+
+nav {
+  position: fixed;
+  top: 0;
+  z-index: 1;
+
+  display: flex;
+
+  width: inherit;
+  border-bottom: solid 1px;
+
+  background: inherit;
+}
+
+nav .bouton {
+  margin-left: auto;
+}
+
+.page {
+  margin: 2em;
+  padding: 0;
 }
 
 header {
@@ -50,7 +73,6 @@ header .anssi {
 
 main h1 {
   position: relative;
-  left: -2em;
   display: inline-block;
   padding: 1em 2em;
   border-radius: 5px;
@@ -144,7 +166,7 @@ section.risques li, section.detail-risques dt {
   justify-content: flex-end;
   align-items: center;
 
-  height: 3em;
+  height: 4em;
   overflow: hidden;
 
   padding: 0.5em 0.5em 0.5em 3.5em;
@@ -294,7 +316,7 @@ section.decision li {
 
 section.detail-risques dl {
   display: grid;
-  grid-template-columns: 1fr 3fr;
+  grid-template-columns: 2fr 3fr;
   grid-gap: 1em 2em;
   align-items: center;
 }
@@ -370,11 +392,20 @@ section.detail-mesures .statut.nonRetenu, .legende .nonRetenu:before {
     page-break-inside: avoid;
   }
 }
+
 @media print {
   * {
       -webkit-print-color-adjust: exact !important;
       color-adjust: exact !important;
     }
+
+  body {
+    margin: 0 auto;
+  }
+
+  .ne-pas-imprimer, .ne-pas-imprimer * {
+    display: none;
+  }
 
   .saut-page {
     break-before: page;

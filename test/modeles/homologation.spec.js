@@ -24,25 +24,25 @@ describe('Une homologation', () => {
     });
   });
 
-  it('sait décrire la nature du service', () => {
+  it('sait décrire le type service', () => {
     const referentiel = Referentiel.creeReferentiel({
-      naturesService: {
-        uneNature: { description: 'Une nature' },
-        uneAutre: { description: 'Une autre' },
+      typesService: {
+        unType: { description: 'Un type' },
+        unAutre: { description: 'Un autre' },
       },
     });
     const homologation = new Homologation({
       id: '123',
       idUtilisateur: '456',
-      informationsGenerales: { nomService: 'nom', natureService: ['uneNature', 'uneAutre'] },
+      informationsGenerales: { nomService: 'nom', typeService: ['unType', 'unAutre'] },
     }, referentiel);
 
-    expect(homologation.descriptionNatureService()).to.equal('Une nature, Une autre');
+    expect(homologation.descriptionTypeService()).to.equal('Un type, Un autre');
   });
 
-  it("se comporte correctement si la nature du service n'est pas présente", () => {
+  it("se comporte correctement si le type service n'est pas présente", () => {
     const homologation = new Homologation({ id: '123' });
-    expect(homologation.descriptionNatureService()).to.equal('Nature du service non renseignée');
+    expect(homologation.descriptionTypeService()).to.equal('Type de service non renseignée');
   });
 
   it('connaît ses caractéristiques complémentaires', () => {
@@ -206,11 +206,6 @@ describe('Une homologation', () => {
     it('détecte que la liste des risques reste à vérifier', () => {
       const homologation = new Homologation({ id: '123' });
       expect(homologation.statutSaisie('risques')).to.equal(InformationsHomologation.A_SAISIR);
-    });
-
-    it('détecte que la liste des risques a été vérifiée', () => {
-      const homologation = new Homologation({ id: '123', risquesVerifies: true });
-      expect(homologation.statutSaisie('risques')).to.equal(InformationsHomologation.COMPLETES);
     });
   });
 

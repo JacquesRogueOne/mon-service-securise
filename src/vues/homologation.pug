@@ -18,10 +18,13 @@ block append styles
   link(href = '/statique/assets/styles/homologation.css', rel = 'stylesheet')
 
 block main
+  .retour.marges-fixes
+    a(href = '/espacePersonnel') ‹&nbsp;&nbsp;Mon espace personnel
+
   .details-homologation.marges-fixes
     .tableau-bord
       h1!= homologation.nomService()
-      a.bouton(href = `/homologation/${homologation.id}/decision`) Télécharger le document d'homologation
+      a.bouton(href = `/homologation/${homologation.id}/decision`) Voir le document d'homologation
 
       each actions, descriptionSection in actionsDeSaisie
         section

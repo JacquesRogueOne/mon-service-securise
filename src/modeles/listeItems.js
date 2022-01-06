@@ -1,4 +1,5 @@
 const InformationsHomologation = require('./informationsHomologation');
+const { pagination } = require('../utilitaires/pagination');
 
 class ListeItems extends InformationsHomologation {
   constructor(ClasseItem, donnees, referentiel) {
@@ -16,6 +17,14 @@ class ListeItems extends InformationsHomologation {
     return this.items.length;
   }
 
+  pagines(nbItemsParPage) {
+    return pagination(nbItemsParPage, this.items);
+  }
+
+  paginees(...params) {
+    return this.pagines(...params);
+  }
+
   statutSaisie() {
     if (this.nombre() === 0) return InformationsHomologation.A_SAISIR;
 
@@ -26,6 +35,10 @@ class ListeItems extends InformationsHomologation {
 
   toJSON() {
     return this.items.map((i) => i.toJSON());
+  }
+
+  tous() {
+    return this.items;
   }
 }
 

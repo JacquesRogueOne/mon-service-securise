@@ -4,12 +4,14 @@ const express = require('express');
 const { ErreurModele } = require('./erreurs');
 const AvisExpertCyber = require('./modeles/avisExpertCyber');
 const CaracteristiquesComplementaires = require('./modeles/caracteristiquesComplementaires');
+const FonctionnaliteSpecifique = require('./modeles/fonctionnaliteSpecifique');
 const Homologation = require('./modeles/homologation');
 const InformationsGenerales = require('./modeles/informationsGenerales');
 const InformationsHomologation = require('./modeles/informationsHomologation');
 const MesureGenerale = require('./modeles/mesureGenerale');
 const MesuresSpecifiques = require('./modeles/mesuresSpecifiques');
 const PartiesPrenantes = require('./modeles/partiesPrenantes');
+const PointAcces = require('./modeles/pointAcces');
 const RisqueGeneral = require('./modeles/risqueGeneral');
 const RisquesSpecifiques = require('./modeles/risquesSpecifiques');
 
@@ -38,16 +40,7 @@ const creeServeur = (depotDonnees, middleware, referentiel, adaptateurMail,
     secure: avecCookieSecurise,
   }));
 
-  app.use((requete, reponse, suite) => {
-    reponse.set({
-      'content-security-policy': "default-src 'self'; script-src 'self' unpkg.com code.jquery.com",
-      'x-frame-options': 'deny',
-      'x-content-type-options': 'nosniff',
-      'referrer-policy': 'no-referrer',
-    });
-    suite();
-  });
-
+  app.use(middleware.positionneHeaders);
   app.use(middleware.repousseExpirationCookie);
 
   app.disable('x-powered-by');
@@ -76,8 +69,8 @@ const creeServeur = (depotDonnees, middleware, referentiel, adaptateurMail,
     reponse.render('connexion');
   });
 
-  app.get('/doisJeHomologuer', (requete, reponse) => {
-    reponse.render('doisJeHomologuer');
+  app.get('/questionsFrequentes', (requete, reponse) => {
+    reponse.render('questionsFrequentes');
   });
 
   app.get('/mentionsLegales', (requete, reponse) => {
@@ -113,8 +106,8 @@ const creeServeur = (depotDonnees, middleware, referentiel, adaptateurMail,
     reponse.render('admin/inscription');
   });
 
-  app.get('/homologations', middleware.verificationAcceptationCGU, (requete, reponse) => {
-    reponse.render('homologations');
+  app.get('/espacePersonnel', middleware.verificationAcceptationCGU, (requete, reponse) => {
+    reponse.render('espacePersonnel');
   });
 
   app.get('/homologation/creation', middleware.verificationAcceptationCGU, (requete, reponse) => {
@@ -165,10 +158,13 @@ const creeServeur = (depotDonnees, middleware, referentiel, adaptateurMail,
       reponse.render('homologation/caracteristiquesComplementaires', { referentiel, homologation });
     });
 
-  app.get('/homologation/:id/decision', middleware.trouveHomologation, (requete, reponse) => {
-    const { homologation } = requete;
-    reponse.render('homologation/decision', { homologation, referentiel });
-  });
+  app.get('/homologation/:id/decision',
+    middleware.trouveHomologation,
+    middleware.positionneHeadersAvecNonce,
+    (requete, reponse) => {
+      const { homologation, nonce } = requete;
+      reponse.render('homologation/decision', { homologation, referentiel, nonce });
+    });
 
   app.get('/homologation/:id/edition', middleware.trouveHomologation, (requete, reponse) => {
     const { homologation } = requete;
@@ -213,29 +209,41 @@ const creeServeur = (depotDonnees, middleware, referentiel, adaptateurMail,
 
   app.post('/api/homologation',
     middleware.verificationAcceptationCGU,
-    middleware.aseptise('nomService'),
+    middleware.aseptise('nomService', 'pointsAcces.*.description', 'fonctionnalitesSpecifiques.*.description'),
+    middleware.aseptiseListe('pointsAcces', PointAcces.proprietes()),
+    middleware.aseptiseListe('fonctionnalitesSpecifiques', FonctionnaliteSpecifique.proprietes()),
     (requete, reponse, suite) => {
       const {
         nomService,
-        natureService,
+        typeService,
         provenanceService,
-        dejaMisEnLigne,
         fonctionnalites,
+        fonctionnalitesSpecifiques,
         donneesCaracterePersonnel,
         delaiAvantImpactCritique,
         presenceResponsable,
+        presentation,
+        pointsAcces,
+        statutDeploiement,
       } = requete.body;
 
       depotDonnees.nouvelleHomologation(requete.idUtilisateurCourant, {
         nomService,
-        natureService,
+        typeService,
         provenanceService,
-        dejaMisEnLigne,
         fonctionnalites,
+        fonctionnalitesSpecifiques,
         donneesCaracterePersonnel,
         delaiAvantImpactCritique,
         presenceResponsable,
+        presentation,
+        pointsAcces,
+        statutDeploiement,
       })
+        .then((idHomologation) => {
+          depotDonnees.ajoutePresentationAHomologation(idHomologation, presentation);
+          return Promise.resolve(idHomologation);
+        })
         .then((idHomologation) => reponse.json({ idHomologation }))
         .catch((e) => {
           if (e instanceof ErreurModele) reponse.status(422).send(e.message);
@@ -245,10 +253,17 @@ const creeServeur = (depotDonnees, middleware, referentiel, adaptateurMail,
 
   app.put('/api/homologation/:id',
     middleware.trouveHomologation,
-    middleware.aseptise('nomService'),
+    middleware.aseptise('nomService', 'pointsAcces.*.description', 'fonctionnalitesSpecifiques.*.description'),
+    middleware.aseptiseListe('pointsAcces', PointAcces.proprietes()),
+    middleware.aseptiseListe('fonctionnalitesSpecifiques', FonctionnaliteSpecifique.proprietes()),
     (requete, reponse, suite) => {
       const infosGenerales = new InformationsGenerales(requete.body, referentiel);
       depotDonnees.ajouteInformationsGeneralesAHomologation(requete.params.id, infosGenerales)
+        .then(() => (
+          depotDonnees.ajoutePresentationAHomologation(
+            requete.params.id, infosGenerales.presentation
+          )
+        ))
         .then(() => reponse.send({ idHomologation: requete.homologation.id }))
         .catch((e) => {
           if (e instanceof ErreurModele) {
@@ -330,21 +345,31 @@ const creeServeur = (depotDonnees, middleware, referentiel, adaptateurMail,
 
   app.post('/api/homologation/:id/risques',
     middleware.trouveHomologation,
-    middleware.aseptise('*', 'risquesSpecifiques.*.description', 'risquesSpecifiques.*.commentaire'),
+    middleware.aseptise(
+      '*',
+      'risquesSpecifiques.*.description',
+      'risquesSpecifiques.*.niveauGravite',
+      'risquesSpecifiques.*.commentaire',
+    ),
     (requete, reponse, suite) => {
       const { risquesSpecifiques = [], ...params } = requete.body;
-      const prefixeCommentaire = /^commentaire-/;
+      const prefixeAttributRisque = /^(commentaire|niveauGravite)-/;
       const idHomologation = requete.homologation.id;
 
       try {
-        const ajouts = Object.keys(params)
-          .filter((p) => p.match(prefixeCommentaire))
-          .reduce((acc, cr) => {
-            const idRisque = cr.replace(prefixeCommentaire, '');
-            const risque = new RisqueGeneral(
-              { id: idRisque, commentaire: params[cr] },
-              referentiel,
-            );
+        const donneesRisques = Object.keys(params)
+          .filter((p) => p.match(prefixeAttributRisque))
+          .reduce((acc, p) => {
+            const idRisque = p.replace(prefixeAttributRisque, '');
+            const nomAttribut = p.match(prefixeAttributRisque)[1];
+            acc[idRisque] ||= {};
+            Object.assign(acc[idRisque], { id: idRisque, [nomAttribut]: params[p] });
+            return acc;
+          }, {});
+
+        const ajouts = Object.values(donneesRisques)
+          .reduce((acc, donnees) => {
+            const risque = new RisqueGeneral(donnees, referentiel);
             return acc.then(() => depotDonnees.ajouteRisqueGeneralAHomologation(
               idHomologation,
               risque,
@@ -353,16 +378,16 @@ const creeServeur = (depotDonnees, middleware, referentiel, adaptateurMail,
 
         ajouts
           .then(() => {
-            const aPersister = risquesSpecifiques.filter((r) => r?.description || r?.commentaire);
-            const listeRisquesSpecifiques = new RisquesSpecifiques(
-              { risquesSpecifiques: aPersister },
-            );
+            const aPersister = risquesSpecifiques
+              .filter((r) => r?.description || r?.commentaire || r?.niveauGravite);
+            const listeRisquesSpecifiques = new RisquesSpecifiques({
+              risquesSpecifiques: aPersister,
+            }, referentiel);
 
             return depotDonnees.remplaceRisquesSpecifiquesPourHomologation(
               idHomologation, listeRisquesSpecifiques,
             );
           })
-          .then(() => depotDonnees.marqueRisquesCommeVerifies(idHomologation))
           .then(() => reponse.send({ idHomologation }))
           .catch(suite);
       } catch {

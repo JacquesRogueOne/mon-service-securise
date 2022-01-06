@@ -3,7 +3,10 @@ const { ErreurMesureInconnue } = require('../erreurs');
 
 class MesureGenerale extends Mesure {
   constructor(donneesMesure, referentiel) {
-    super(['id', 'statut', 'modalites']);
+    super({
+      proprietesAtomiquesRequises: ['id', 'statut'],
+      proprietesAtomiquesFacultatives: ['modalites'],
+    });
 
     MesureGenerale.valide(donneesMesure, referentiel);
     this.renseigneProprietes(donneesMesure);
@@ -15,7 +18,7 @@ class MesureGenerale extends Mesure {
     return this.referentiel.mesures()[this.id];
   }
 
-  description() {
+  descriptionMesure() {
     return this.donneesReferentiel().description;
   }
 

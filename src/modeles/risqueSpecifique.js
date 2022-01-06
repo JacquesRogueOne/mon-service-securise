@@ -1,9 +1,15 @@
-const Base = require('./base');
+const Risque = require('./risque');
 
-class RisqueSpecifique extends Base {
-  constructor(donneesRisque = {}) {
-    super(['description', 'commentaire']);
+class RisqueSpecifique extends Risque {
+  constructor(donneesRisque, referentiel) {
+    super(donneesRisque, referentiel);
+
+    this.proprietesAtomiquesRequises.push('description');
     this.renseigneProprietes(donneesRisque);
+  }
+
+  descriptionRisque() {
+    return this.description;
   }
 }
 

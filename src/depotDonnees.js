@@ -7,6 +7,8 @@ const {
   ErreurUtilisateurExistant,
 } = require('./erreurs');
 const AdaptateurPersistanceMemoire = require('./adaptateurs/adaptateurPersistanceMemoire');
+const CaracteristiquesComplementaires = require('./modeles/caracteristiquesComplementaires');
+const FabriqueAutorisation = require('./modeles/autorisations/fabriqueAutorisation');
 const Homologation = require('./modeles/homologation');
 const Utilisateur = require('./modeles/utilisateur');
 
@@ -110,6 +112,18 @@ const creeDepot = (config = {}) => {
     metsAJourProprieteHomologation('caracteristiquesComplementaires', ...params)
   );
 
+  const ajoutePresentationAHomologation = (idHomologation, presentation) => (
+    adaptateurPersistance.homologation(idHomologation)
+      .then((h) => {
+        const caracteristiques = new CaracteristiquesComplementaires(
+          h.caracteristiquesComplementaires,
+          referentiel
+        );
+        caracteristiques.presentation = presentation;
+        return metsAJourProprieteHomologation('caracteristiquesComplementaires', h, caracteristiques);
+      })
+  );
+
   const ajoutePartiesPrenantesAHomologation = (...params) => (
     metsAJourProprieteHomologation('partiesPrenantes', ...params)
   );
@@ -118,23 +132,21 @@ const creeDepot = (config = {}) => {
     metsAJourProprieteHomologation('avisExpertCyber', ...params)
   );
 
-  const marqueRisquesCommeVerifies = (idHomologation) => (
-    adaptateurPersistance.metsAJourHomologation(idHomologation, { risquesVerifies: true })
-  );
-
   const homologations = (idUtilisateur) => adaptateurPersistance.homologations(idUtilisateur)
     .then((hs) => hs.map((h) => new Homologation(h, referentiel)));
 
-  const nouvelleHomologation = (idUtilisateur, donneesInformationsGenerales) => (
-    valideInformationsGenerales(idUtilisateur, donneesInformationsGenerales)
-      .then(() => {
-        const id = adaptateurUUID.genereUUID();
-        const donnees = { idUtilisateur, informationsGenerales: donneesInformationsGenerales };
+  const nouvelleHomologation = (idUtilisateur, donneesInformationsGenerales) => {
+    const idHomologation = adaptateurUUID.genereUUID();
+    const idAutorisation = adaptateurUUID.genereUUID();
+    const donnees = { idUtilisateur, informationsGenerales: donneesInformationsGenerales };
 
-        return adaptateurPersistance.ajouteHomologation(id, donnees)
-          .then(() => id);
-      })
-  );
+    return valideInformationsGenerales(idUtilisateur, donneesInformationsGenerales)
+      .then(() => adaptateurPersistance.ajouteHomologation(idHomologation, donnees))
+      .then(() => adaptateurPersistance.ajouteAutorisation(idAutorisation, {
+        idUtilisateur, idHomologation, type: 'createur',
+      }))
+      .then(() => idHomologation);
+  };
 
   const remplaceMesuresSpecifiquesPourHomologation = (...params) => (
     remplaceProprieteHomologation('mesuresSpecifiques', ...params)
@@ -228,17 +240,21 @@ const creeDepot = (config = {}) => {
       .then(() => utilisateur(utilisateurAModifier.id))
   );
 
+  const autorisations = (idUtilisateur) => adaptateurPersistance.autorisations(idUtilisateur)
+    .then((as) => as.map((a) => FabriqueAutorisation.fabrique(a)));
+
   return {
     ajouteAvisExpertCyberAHomologation,
     ajouteCaracteristiquesAHomologation,
     ajouteInformationsGeneralesAHomologation,
     ajouteMesureGeneraleAHomologation,
     ajoutePartiesPrenantesAHomologation,
+    ajoutePresentationAHomologation,
     ajouteRisqueGeneralAHomologation,
+    autorisations,
     homologation,
     homologationExiste,
     homologations,
-    marqueRisquesCommeVerifies,
     metsAJourMotDePasse,
     nouvelleHomologation,
     nouvelUtilisateur,
@@ -260,6 +276,7 @@ const creeDepotVide = () => {
   const adaptateurPersistance = AdaptateurPersistanceMemoire.nouvelAdaptateur();
   return adaptateurPersistance.supprimeUtilisateurs()
     .then(() => adaptateurPersistance.supprimeHomologations())
+    .then(() => adaptateurPersistance.supprimeAutorisations())
     .then(() => creeDepot({ adaptateurPersistance }));
 };
 

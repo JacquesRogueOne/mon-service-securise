@@ -29,24 +29,6 @@ main a {
   color: #1b7cc4;
 }
 
-.bouton {
-  display: inline-block;
-
-  margin: 2em;
-  padding: 1em 3em;
-  border-radius: 3px;
-  background: #1b7cc4;
-
-  text-decoration: none;
-  color: white;
-}
-
-.bouton:hover {
-  background: #1b7cc4e0;
-
-  cursor: pointer;
-}
-
 section {
   padding: 2em 0;
   border-top: solid 1px #abb6bf;
@@ -56,4 +38,12 @@ section {
 
 section:last-of-type {
   border-bottom: solid 1px #abb6bf;
+}
+
+.retour {
+  display: inline-block;
+
+  margin-top: 3em;
+
+  text-align: left;
 }

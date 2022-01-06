@@ -9,19 +9,34 @@ describe('Un risque général', () => {
 
   beforeEach(() => (
     referentiel = Referentiel.creeReferentiel({
-      risques: { unRisque: { description: 'Une description' } },
+      niveauxGravite: { unNiveau: {} },
+      risques: { unRisque: {} },
     })
   ));
 
   it('sait se décrire', () => {
-    const risque = new RisqueGeneral({ id: 'unRisque', commentaire: 'Un commentaire' }, referentiel);
+    const risque = new RisqueGeneral({
+      id: 'unRisque',
+      commentaire: 'Un commentaire',
+      niveauGravite: 'unNiveau',
+    }, referentiel);
 
     expect(risque.id).to.equal('unRisque');
     expect(risque.commentaire).to.equal('Un commentaire');
+    expect(risque.niveauGravite).to.equal('unNiveau');
     expect(risque.toJSON()).to.eql({
       id: 'unRisque',
       commentaire: 'Un commentaire',
+      niveauGravite: 'unNiveau',
     });
+  });
+
+  it('connaît sa description', () => {
+    referentiel.recharge({
+      risques: { unRisque: { description: 'Une description' } },
+    });
+    const risque = new RisqueGeneral({ id: 'unRisque' }, referentiel);
+    expect(risque.descriptionRisque()).to.equal('Une description');
   });
 
   it('retourne un JSON partiel si certaines informations sont inexistantes', () => {

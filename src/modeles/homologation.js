@@ -26,7 +26,6 @@ class Homologation {
       partiesPrenantes = {},
       risquesGeneraux = [],
       risquesSpecifiques = [],
-      risquesVerifies = false,
       avisExpertCyber = {},
     } = donnees;
 
@@ -39,7 +38,7 @@ class Homologation {
     );
     this.partiesPrenantes = new PartiesPrenantes(partiesPrenantes);
     this.risques = new Risques(
-      { risquesGeneraux, risquesSpecifiques, risquesVerifies },
+      { risquesGeneraux, risquesSpecifiques },
       referentiel,
     );
     this.avisExpertCyber = new AvisExpertCyber(avisExpertCyber, referentiel);
@@ -61,7 +60,7 @@ class Homologation {
     return this.avisExpertCyber.descriptionExpiration();
   }
 
-  descriptionNatureService() { return this.informationsGenerales.descriptionNatureService(); }
+  descriptionTypeService() { return this.informationsGenerales.descriptionTypeService(); }
 
   descriptionStatutsMesures() {
     return Mesure.statutsPossibles().reduce((acc, s) => {
@@ -87,6 +86,10 @@ class Homologation {
   piloteProjet() { return this.partiesPrenantes.piloteProjet; }
 
   presentation() { return this.caracteristiquesComplementaires.presentation; }
+
+  risquesPrincipaux() {
+    return this.risques.principaux();
+  }
 
   risquesSpecifiques() {
     return this.risques.risquesSpecifiques;

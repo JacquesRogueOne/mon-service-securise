@@ -6,9 +6,11 @@ class ErreurDonneesStatistiques extends ErreurModele {}
 class ErreurEmailManquant extends ErreurModele {}
 class ErreurLocalisationDonneesInvalide extends ErreurModele {}
 class ErreurMesureInconnue extends ErreurModele {}
+class ErreurNiveauGraviteInconnu extends ErreurModele {}
 class ErreurNomServiceDejaExistant extends ErreurModele {}
 class ErreurNomServiceManquant extends ErreurModele {}
 class ErreurRisqueInconnu extends ErreurModele {}
+class ErreurStatutDeploiementInvalide extends ErreurModele {}
 class ErreurStatutMesureInvalide extends ErreurModele {}
 class ErreurUtilisateurExistant extends ErreurModele {}
 
@@ -21,9 +23,11 @@ module.exports = {
   ErreurLocalisationDonneesInvalide,
   ErreurMesureInconnue,
   ErreurModele,
+  ErreurNiveauGraviteInconnu,
   ErreurNomServiceDejaExistant,
   ErreurNomServiceManquant,
   ErreurRisqueInconnu,
+  ErreurStatutDeploiementInvalide,
   ErreurStatutMesureInvalide,
   ErreurUtilisateurExistant,
 };

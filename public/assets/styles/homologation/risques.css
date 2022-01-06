@@ -22,6 +22,70 @@
   background-repeat: no-repeat;
 }
 
-.risque .titre {
+.synthese {
+  display: flex;
+  align-items: center;
+  gap: 2em;
+}
+
+.synthese .titre, .synthese input[name^=description-risque-specifique] {
+  flex-basis: 67%;
+}
+
+.synthese .titre {
   font-weight: bold;
+}
+
+.niveau-gravite .curseur {
+  display: flex;
+  gap: 0.4em;
+}
+
+.niveau-gravite .disque {
+  height: 1em;
+  width: 1em;
+
+  border-radius: 50%;
+  border: solid .5px;
+  border-color: transparent;
+  background: #ebedf0;
+}
+
+.niveau-gravite .disque:hover {
+  cursor: pointer;
+  border-color: black;
+}
+
+.niveau-gravite .disque.cercle {
+  border: solid .5px black;
+}
+
+.niveau-gravite .disque.eteint {
+  background: #ebedf0;
+}
+
+.niveau-gravite .disque.blanc {
+  background: #fff;
+}
+
+.niveau-gravite .disque.vert {
+  background: #1aaf54;
+}
+
+.niveau-gravite .disque.jaune {
+  background: #fcdf41;
+}
+
+.niveau-gravite .disque.orange {
+  background: #f9b049;
+}
+
+.niveau-gravite .disque.rouge {
+  background: red;
+}
+
+.niveau-gravite .legende {
+  height: 1.4em;
+  font-size: 0.7em;
+  font-weight: normal;
 }
